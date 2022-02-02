@@ -2,7 +2,7 @@
 
 Los scripts contenidos en este documento describen el tratamiento previo de los datos del artículo *New methodology for assessing the environmental efficiency of transport: Application to the valorization of biomass from phytoremediation* de Vigil Berrocal M., Franco Vázquez L. y Marey Pérez M.
 
-Para entender el proceso global antes de ejecutar los procedimientos aquí descritos, por favor lea el [readme][Readme.md].
+Para entender el proceso global antes de ejecutar los procedimientos aquí descritos, por favor lea el [readme](Readme.md).
 
 ## Topología de la red
 
