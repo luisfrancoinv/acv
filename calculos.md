@@ -4,6 +4,8 @@ Los scripts contenidos en este documento describen los cálculos llevados a cabo
 
 Para entender el proceso global antes de ejecutar los procedimientos aquí descritos, por favor lea el [readme](Readme.md).
 
+Después de ejecutar los scripts aquí descritos deben ejecutarse los explicados en el documento de [tiempos](tiempo.md).
+
 ## Establecer coste a carga completa
 
 Creamos nuevas columnas para calcular los costes sin carga y a carga completa.
@@ -236,4 +238,124 @@ USING
        WHERE coste_agregado > 10000
        GROUP BY end_vid) f
 WHERE o.end_vid = f.end_vid;
+```
+
+## Calcular el tiempo de desplazamiento de los recorridos
+
+```sql
+ALTER TABLE openstreetmap.osm_conectada_noded ADD COLUMN coste_t_1 numeric;
+ALTER TABLE openstreetmap.osm_conectada_noded ADD COLUMN coste_reverso_t_1 numeric;
+ALTER TABLE openstreetmap.osm_conectada_noded ADD COLUMN kmh numeric;
+
+UPDATE openstreetmap.osm_conectada_noded
+SET coste_t_1 = (longitud::numeric/1000::numeric)::numeric/25::numeric,
+      coste_reverso_t_1 = (longitud::numeric/1000::numeric)::numeric/25::numeric,
+      kmh = 25
+WHERE tipo_carretera = 'Urban Peak';
+
+UPDATE openstreetmap.osm_conectada_noded
+SET coste_t_1 = (longitud::numeric/1000::numeric)::numeric/100::numeric,
+      coste_reverso_t_1 = (longitud::numeric/1000::numeric)::numeric/100::numeric,
+      kmh = 100
+WHERE tipo_carretera = 'Highway';
+
+UPDATE openstreetmap.osm_conectada_noded
+SET coste_t_1 = (longitud::numeric/1000::numeric)::numeric/80::numeric,
+       coste_reverso_t_1 = (longitud::numeric/1000::numeric)::numeric/80::numeric,
+      kmh = 80
+WHERE tipo_carretera = 'Rural';
+
+UPDATE openstreetmap.osm_conectada_noded SET coste_reverso_t_1 = 9999999999999999999999999999999999
+WHERE coste_reverso_carga_completa = 9999999999999999999999999999999999;
+
+UPDATE openstreetmap.osm_conectada_noded SET coste_t_1 = 9999999999999999999999999999999999
+WHERE coste_carga_completa = 9999999999999999999999999999999999;
+```
+
+A mayores hay que asegurarse de que se cumplan los límites de velocidad del modelo
+
+```sql
+ALTER TABLE openstreetmap.osm_conectada_noded ADD COLUMN coste_t_1_ida numeric;
+ALTER TABLE openstreetmap.osm_conectada_noded ADD COLUMN coste_reverso_t_1_ida numeric;
+ALTER TABLE openstreetmap.osm_conectada_noded ADD COLUMN coste_t_1_vuelta numeric;
+ALTER TABLE openstreetmap.osm_conectada_noded ADD COLUMN coste_reverso_t_1_vuelta numeric;
+
+UPDATE openstreetmap.osm_conectada_noded o
+SET coste_t_1_ida = coste_t_1;
+
+UPDATE openstreetmap.osm_conectada_noded o
+SET coste_reverso_t_1_ida = coste_reverso_t_1;
+
+UPDATE openstreetmap.osm_conectada_noded o
+SET coste_t_1_vuelta = coste_t_1;
+
+UPDATE openstreetmap.osm_conectada_noded o
+SET coste_reverso_t_1_vuelta = coste_reverso_t_1;
+
+UPDATE openstreetmap.osm_conectada_noded o
+SET coste_t_1_ida = (longitud::numeric/1000::numeric)::numeric/max_speed_kmh::numeric
+FROM  parametros_acv p
+WHERE load = 1 
+      AND euros_standard_technology = 'Euro IV'
+      AND technology = 'SCR'
+      AND max_speed_kmh < kmh
+      AND o.grupo_pendiente = road_slope
+      AND coste_t_1 < 1000000;
+
+UPDATE openstreetmap.osm_conectada_noded o
+SET coste_reverso_t_1_ida = (longitud::numeric/1000::numeric)::numeric/max_speed_kmh::numeric
+FROM  parametros_acv p
+WHERE load = 1 
+      AND euros_standard_technology = 'Euro IV'
+      AND technology = 'SCR'
+      AND max_speed_kmh < kmh
+      AND o.grupo_pendiente_reversa = road_slope
+      AND coste_reverso_t_1 < 1000000;
+
+UPDATE openstreetmap.osm_conectada_noded o
+SET coste_t_1_vuelta = (longitud::numeric/1000::numeric)::numeric/max_speed_kmh::numeric
+FROM  parametros_acv p
+WHERE load = 0 
+      AND euros_standard_technology = 'Euro IV'
+      AND technology = 'SCR'
+      AND max_speed_kmh < kmh
+      AND o.grupo_pendiente = road_slope
+      AND coste_t_1 < 1000000;
+
+UPDATE openstreetmap.osm_conectada_noded o
+SET coste_reverso_t_1_vuelta = (longitud::numeric/1000::numeric)::numeric/max_speed_kmh::numeric
+FROM  parametros_acv p
+WHERE load = 0
+      AND euros_standard_technology = 'Euro IV'
+      AND technology = 'SCR'
+      AND max_speed_kmh < kmh
+      AND o.grupo_pendiente_reversa = road_slope
+      AND coste_reverso_t_1 < 1000000;
+```
+
+```sql
+ALTER TABLE euro_iv.carga_completa_osm_noded_caso_practico ADD COLUMN tiempo numeric;
+UPDATE euro_iv.carga_completa_osm_noded_caso_practico c
+SET tiempo = coste_t_1_ida
+FROM openstreetmap.osm_conectada_noded red
+WHERE edge_id = red.id AND source = node AND sentido = 1
+;
+
+UPDATE euro_iv.carga_completa_osm_noded_caso_practico c
+SET tiempo = coste_reverso_t_1_ida
+FROM openstreetmap.osm_conectada_noded red
+WHERE edge_id = red.id AND target = node AND sentido = 1
+;
+
+UPDATE euro_iv.carga_completa_osm_noded_caso_practico c
+SET tiempo = coste_t_1_vuelta
+FROM openstreetmap.osm_conectada_noded red
+WHERE edge_id = red.id AND source = node AND sentido = 2
+;
+
+UPDATE euro_iv.carga_completa_osm_noded_caso_practico c
+SET tiempo = coste_reverso_t_1_vuelta
+FROM openstreetmap.osm_conectada_noded red
+WHERE edge_id = red.id AND target = node AND sentido = 2
+;   
 ```
